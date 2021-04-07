@@ -1,0 +1,73 @@
+#!/bin/bash
+sendlog() {
+	subject="$1"
+	mesg="$2"
+	log="$3"
+	attach="$tmpdir/errorlog.txt"
+
+	if [ -n "$log" ]; then
+		cat "$log">"$attach"
+	else
+		cat>"$attach"
+	fi
+
+	#echo "$mesg"|email -c "$emailconf" -s "$1" -a "$attach" "$recipients"
+}
+
+cleanup() {
+	[ -f "$tmpdir/.chibirobo" ] && rm -rf "$tmpdir"
+}
+
+emailconf=/mnt/home/etc/email/email.conf
+recipients=desbaine@gmail.com
+tmpdir=$(mktemp -d) || exit 1
+
+errorlog=$(mktemp --tmpdir="$tmpdir") || exit 1
+touch "$tmpdir/.chibirobo" || exit 1
+
+trap cleanup 0
+
+while [ $# -gt 0 ]; do
+	opt="$1"
+	shift
+	case "$opt" in
+	-v)
+		verbose=1;;
+	--nosync)
+	        nosync=1;;
+	esac
+done
+
+if [ -z "$verbose" ]; then
+	exec 1>/dev/null
+        eix_sync_opts="$eix_sync_opts -q"
+fi
+
+exec 2>"$errorlog"
+
+if [ -z "$nosync" ]; then
+    eix-sync $eix_sync_opts || {
+            sendlog "DALEK: Help, I can't sync!" "I couldn't synchronize with the repository...I'm sorry..." "$errorlog"
+            exit 1
+    }
+fi
+
+do-emerge() {
+    #trap 'eselect opengl set nvidia' EXIT
+    #eselect opengl set xorg-x11 && \
+    emerge --color n --keep-going -qvuDN --with-bdeps=y --accept-properties=-interactive world
+    ret="$?"
+    return "$ret"
+}
+
+do-emerge || {
+	sendlog "DALEK: Help, I couldn't update world!" "I couldn't update everything in world.  I hope at least something worked, though!" "$errorlog"
+	exit 1
+}
+
+revdep-rebuild -- --keep-going -qv || {
+	sendlog "DALEK: Help, I couldn't revdep-rebuild" "I couldn't ensure linking consistency!" "$errorlog"
+	exit 1
+}
+
+eclean -d distfiles
