@@ -2,12 +2,121 @@
 
 set -m
 
+if [[ -e /etc/profile.env ]]; then
+    source /etc/profile.env
+fi
+
+declare -r TAB=$'\t'
+declare -r CSI=$'\e['
+declare -r FG=3
+declare -r YELLOW=3
+declare -r CYAN=6
+declare -r BOLD=1
+declare -r UNDERLINE=4
+declare -r TITLE="${CSI}${BOLD};${UNDERLINE};${FG}${CYAN}m"
+declare -r DATUM="${CSI}${BOLD};${FG}${YELLOW}m"
+declare -r NORM="${CSI}m"
+declare -r ICON_OK="✅"
+declare -r ICON_WARN="⚠️"
+declare -r ICON_ERR="❌"
+declare -r ICON_INFO="ℹ️"
+declare -r ICON_NEW="🎁"
+declare -r ICON_ROBOT="🤖"
+declare -r ICON_CLEAN=$'\xf0\x9f\xa7\xb9'
+declare -r BULLET="•"
+
+style() {
+    echo "$*$NORM"
+}
+
+oops() {
+    (( ++errors )) || :
+}
+
+journal() {
+    local icon=
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        --icon)
+            shift
+            icon="$1"
+            shift
+            ;;
+        *)
+            break
+        esac
+    done
+
+    style "${icon}${icon:+ }${TITLE}$*"
+    echo
+    cat
+    echo
+}
+
+journalled() {
+    local icon="$ICON_OK" title stdout stderr ret
+    stdout="$(mktemp --tmpdir="$tmpdir")"
+    stderr="$(mktemp --tmpdir="$tmpdir")"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        --icon)
+            shift
+            icon="$1"
+            shift
+            ;;
+        *)
+            break
+        esac
+    done
+
+    title="$1"
+    shift
+
+    "$@" >"$stdout" 2>"$stderr"
+    ret="$?"
+
+    (( ret )) && icon="$ICON_ERR"
+
+    {
+        if (( ret )); then
+            oops
+            echo "This command failed with code $(style "$DATUM$ret"):"
+            echo
+            echo "$TAB$*"
+            echo
+            echo "Standard output was:"
+            echo
+            sed 's/^/\t/' < "$stdout" 
+            echo
+            echo "Standard error was:"
+            echo
+            sed 's/^/\t/' < "$stderr"
+        elif [[ -s "$stdout" ]]; then
+            cat "$stdout"
+        fi
+    } | journal --icon "$icon" "$title"
+
+    rm "$stdout" "$stderr"
+
+    return "$ret"
+}
+
 email() {
+
     subject="$1"
+
+    if [[ -n "$verbose" ]]; then
+        echo "$subject"
+        echo
+        cat
+        return
+    fi
 
     {
         echo "From: $recipients"
-        echo "Subject: 🤖 $HOSTNAME: $subject" 
+        echo "Subject: $ICON_ROBOT $HOSTNAME: $subject" 
         echo "Content-Type: text/html; charset=utf-8"
         echo
         {
@@ -34,7 +143,7 @@ cleanup() {
 }
 
 do-sync() {
-    emaint sync -A || return $?
+    emaint sync -A > /dev/null || return $?
     eix-diff > "$tmpdir"/eix-diff.txt
 
     if [[ -s $tmpdir/eix-diff.txt ]]; then
@@ -42,12 +151,13 @@ do-sync() {
             echo "These installed packages got updated by the Gentoo maintainers:"
             echo
             cat "$tmpdir"/eix-diff.txt
-        } | email "🎁 Repository updates!"
+        } | email "$ICON_NEW Repository updates!"
     fi
 }
 
 do-emerge() {
-    emerge --color n --keep-going -qvuDN --with-bdeps=y --accept-properties=-interactive @world
+    emerge --color n --keep-going -qvuDN --with-bdeps=y --accept-properties=-interactive @world \
+    >/dev/null
 }
 
 installed-size() {
@@ -57,11 +167,26 @@ installed-size() {
     | numfmt --to=iec-i --format=%fB
 }
 
+update-kernel() {
+    command update-kernel "$@" >/dev/null
+}
+
+eclean-distfiles() {
+    command eclean -d distfiles -f "$@" | tail -n 1
+}
+
+revdep-rebuild() {
+    command revdep-rebuild -- --keep-going -q > /dev/null
+}
+
+verbose=
+nosync=
+
 while [ $# -gt 0 ]; do
     opt="$1"
     shift
     case "$opt" in
-    -v)
+    -v|--verbose)
         verbose=1;;
     --nosync)
         nosync=1;;
@@ -72,12 +197,17 @@ myname="$0"
 recipients=alex.iris.parker@gmail.com
 tmpdir="$(mktemp -d)" || exit 1
 errorlog="$tmpdir/stderr.txt"
+errors=0
+badnews=
 
 trap cleanup 0
 
 chown portage:portage "$tmpdir"
 chmod 770 "$tmpdir"
 
+export HOME=~portage
+rootbin=~root/bin
+export PATH="$rootbin:$PATH"
 export FORCE_COLORS=true
 export FEATURES=-candy
 export EMERGE_LOG_DIR="$tmpdir"
@@ -96,124 +226,76 @@ equery_job=$!
 exec 2>"$errorlog"
 
 if [ -z "$verbose" ]; then
-    exec 1>"$tmpdir/stdout.txt"
+    exec 1>"$tmpdir/journal.txt"
 else
     tail -f "$errorlog" >&2 &
 fi
 
+main() {
 
-if [ -z "$nosync" ]; then
-    do-sync || {
+    if [ -z "$nosync" ]; then
+        if ! journalled "Synchronize the repositories" do-sync; then
+            badnews="Failed to synchronize!"
+            return
+        fi
+    fi
+
+    if ! journalled "Update @world" do-emerge; then
+        badnews="Failed to update @world!"
+        return
+    fi
+
+    if ! journalled "Ensure linking consistency" revdep-rebuild; then
+        badnews="Failed to ensure linking consistency!"
+        return
+    fi
+
+    grep -F ') Merging (' "$tmpdir"/emerge.log | awk -v FS='[():]' '{print $5}' > "$tmpdir"/merged.txt
+    declare -a merged
+    mapfile -t merged < "$tmpdir"/merged.txt
+
+    if [[ ${#merged[@]} -gt 0 ]]; then
         {
-            echo "I couldn't sync the portage repositories!"
-            echo
-            echo "Log:"
-            echo
-            cat "$errorlog"
-        } | email "Help, I can't sync!"
-        exit
-    }
-fi
+            while read -r line; do
+                echo "${TAB}${BULLET} $(style "${DATUM}$line")"
+            done < "$tmpdir"/merged.txt
+        } | journal --icon "$ICON_INFO" "I merged these packages:"
+    fi
 
-if ! do-emerge; then
-    {
-        echo "I couldn't update everything in @world."
-        echo
-        echo "Log:"
-        echo
-        cat "$errorlog"
-    } | email "❌ Help, I couldn't update @world!"
-    exit
-fi
+    wait "$equery_job"
 
-revdep-rebuild -- --keep-going -qv || {
-    {
-        echo "I couldn't ensure linking consistency."
-        echo
-        echo "Log:"
-        echo
-        cat "$errorlog"
-    } | email "❌ Help, I couldn't revdep-rebuild!"
-    exit
+    if grep -qF sys-kernel/gentoo-sources < "$tmpdir"/merged.txt; then
+        nv="$(find /usr/src -maxdepth 1 -type d -name linux-\* -printf '%f\0' | sort -zVr | head -zn 1)"
+        nv="${nv#linux-}"
+        if journalled "Update to Linux kernel $nv." update-kernel; then
+            journalled --icon "$ICON_CLEAN" "Clean old kernels." eclean-kernel -n 3
+        fi
+    elif grep -qFf "$tmpdir"/dracut-packages.txt < "$tmpdir"/merged.txt; then
+        journalled "Update the initial ram disk." dracut --force
+    fi
+
+    : | needrestart -qnrl | grep -Fv 'systemctl restart user@' > "$tmpdir"/needrestart.txt
+
+    if [[ -s "$tmpdir"/needrestart.txt ]]; then
+        sed 's/^/\t/' < "$tmpdir"/needrestart.txt \
+        | journal --icon "$ICON_WARN" "These services need to be restarted:"
+    fi
+
+    journalled --icon "$ICON_CLEAN" "Clean the distfiles" eclean-distfiles
+
+    echo "Goodbye!" \
+    | journal --icon "$ICON_INFO" "Total installed package size is now: ${CSI}${FG}${YELLOW}m$(installed-size)"
 }
 
-grep -F ') Merging (' "$tmpdir"/emerge.log | awk -v FS='[():]' '{print $5}' > "$tmpdir"/merged.txt
-declare -a merged
-mapfile -t merged < "$tmpdir"/merged.txt
-touch "$tmpdir"/progress.txt
+main
 
-if [[ ${#merged[@]} -gt 0 ]]; then
-    {
-        echo "I merged these packages:"
-        echo
-        cat "$tmpdir"/merged.txt
-        echo
-    } >> "$tmpdir"/progress.txt
-fi
-
-wait "$equery_job"
-
-if grep -qFf "$tmpdir"/dracut-packages.txt < "$tmpdir"/merged.txt; then
-
-    if dracut --force; then
-        echo "I updated the init ram disk." >> "$tmpdir"/progress.txt
+if [[ -z $verbose ]]; then
+    if (( errors == 0 )); then
+        subj="$ICON_OK Chibirobo ran successfully"
+    elif [[ -n $badnews ]]; then
+        subj="$ICON_ERR ${badnews}"
     else
-        {
-            echo "There were kernel module updates, but dracut failed..." 
-            echo
-            echo "Log:"
-            echo
-            cat "$errorlog"
-        } | email "❌ Help, I couldn't update initramfs!"
+        subj="$ICON_WARN Chibirobo ran with errors"
     fi
-
-elif grep -qF sys-kernel/gentoo-sources < "$tmpdir"/merged.txt; then
-    if update-kernel; then
-        {
-            echo "I updated the kernel to $(readlink /usr/src/linux|cut -d- -f2-)."
-            echo
-        } >> "$tmpdir"/progress.txt
-    else
-        {
-            echo "There was a kernel update, but the update-kernel script failed..."
-            echo
-            echo "Log:"
-            echo
-            cat "$errorlog"
-        } | email "❌ Help, I couldn't update the kernel!"
-    fi
+    email "$subj" < "$tmpdir"/journal.txt
 fi
-
-: | needrestart -qnrl | grep -Fv 'systemctl restart user@' > "$tmpdir"/needrestart.txt
-
-if [[ -s "$tmpdir"/needrestart.txt ]]; then
-    {
-        echo "These services need to be restarted:"
-        echo
-        sed 's/^/\t/' "$tmpdir"/needrestart.txt
-    } >> "$tmpdir"/progress.txt
-fi
-
-if eclean -d distfiles | tail -n 3 > "$tmpdir"/eclean.txt; then
-    if [[ -s "$tmpdir"/eclean.txt ]]; then
-        {
-            echo "I cleaned the distfiles"
-            echo
-            cat "$tmpdir"/eclean.txt
-            echo
-        } >> "$tmpdir"/progress.txt
-    fi
-else
-    {
-        echo "There was a problem running eclean."
-        echo
-    } >> "$tmpdir"/progress.txt
-fi
-
-{
-    echo "Total installed package size is now: $(installed-size)"
-    echo
-    echo "Goodbye!"
-} >> "$tmpdir"/progress.txt
-
-email "✅ Chibirobo ran successfully!" < "$tmpdir"/progress.txt
