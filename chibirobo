@@ -23,6 +23,7 @@ declare -r ICON_INFO="ℹ️"
 declare -r ICON_NEW="🎁"
 declare -r ICON_ROBOT="🤖"
 declare -r ICON_CLEAN=$'\xf0\x9f\xa7\xb9'
+declare -r ICON_WAIT="⏳"
 declare -r BULLET="•"
 
 style() {
@@ -172,7 +173,7 @@ update-kernel() {
 }
 
 eclean-distfiles() {
-    command eclean -d distfiles -f "$@" | tail -n 1
+    command eclean -d distfiles -f "$@" | tail -n 10
 }
 
 revdep-rebuild() {
@@ -267,7 +268,7 @@ main() {
     inhibit-suspend
 
     if ! is-network-up; then
-        journalled "Wait for the network to come up" wait-for-network
+        journalled --icon "$ICON_WAIT" "Wait for the network to come up" wait-for-network
     fi
 
     if [ -z "$nosync" ]; then
