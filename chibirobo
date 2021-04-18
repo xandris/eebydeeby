@@ -131,7 +131,7 @@ email() {
 
 cleanup() {
     for j in $(jobs -p); do
-        kill -- -"$j"
+        kill -INT -- -"$j"
     done
     wait
     for i in emerge{,-fetch}.log; do
@@ -156,7 +156,7 @@ do-sync() {
 }
 
 do-emerge() {
-    emerge --color n --keep-going -qvuDN --with-bdeps=y --accept-properties=-interactive @world \
+    emerge --color n --keep-going -qvuDN --with-bdeps=y --accept-properties=-interactive --accept-restrict=-fetch @world \
     >/dev/null
 }
 
@@ -177,6 +177,38 @@ eclean-distfiles() {
 
 revdep-rebuild() {
     command revdep-rebuild -- --keep-going -q > /dev/null
+}
+
+is-network-up() {
+    [[ $(nmcli network connectivity check) == full ]]
+}
+
+wait-for-network() {
+    local retries=6
+    sleep 10
+    until is-network-up; do
+        sleep 10
+        if (( --retries == 0 )); then
+            echo "Network didn't come up in time!" >&2
+            return 1
+        fi
+    done
+}
+
+inhibit-suspend() {
+    local -a uids
+    mapfile -t uids < <(systemctl show user@\*.service -P UID|grep -Fxv '')
+    for i in "${uids[@]}"; do
+        local name bus="/run/user/$i/bus"
+        if ! [[ -S $bus ]]; then
+            continue
+        fi
+        name="$(getent passwd "$i"|cut -d: -f1)"
+        env -i DBUS_SESSION_BUS_ADDRESS=unix:path="$bus" \
+        sudo --preserve-env=DBUS_SESSION_BUS_ADDRESS \
+             --user="$name" \
+             gnome-session-inhibit --inhibit suspend --inhibit-only --reason "Chibirobo is doing some cleaning..." >/dev/null &
+    done
 }
 
 verbose=
@@ -232,6 +264,11 @@ else
 fi
 
 main() {
+    inhibit-suspend
+
+    if ! is-network-up; then
+        journalled "Wait for the network to come up" wait-for-network
+    fi
 
     if [ -z "$nosync" ]; then
         if ! journalled "Synchronize the repositories" do-sync; then
@@ -264,9 +301,9 @@ main() {
 
     wait "$equery_job"
 
-    if grep -qF sys-kernel/gentoo-sources < "$tmpdir"/merged.txt; then
-        nv="$(find /usr/src -maxdepth 1 -type d -name linux-\* -printf '%f\0' | sort -zVr | head -zn 1)"
-        nv="${nv#linux-}"
+    if ! update-kernel --check; then
+        local nv
+        nv="$(update-kernel --newest)"
         if journalled "Update to Linux kernel $nv." update-kernel; then
             journalled --icon "$ICON_CLEAN" "Clean old kernels." eclean-kernel -n 3
         fi
@@ -290,10 +327,10 @@ main() {
 main
 
 if [[ -z $verbose ]]; then
-    if (( errors == 0 )); then
-        subj="$ICON_OK Chibirobo ran successfully"
-    elif [[ -n $badnews ]]; then
+    if [[ -n $badnews ]]; then
         subj="$ICON_ERR ${badnews}"
+    elif (( errors == 0 )); then
+        subj="$ICON_OK Chibirobo ran successfully"
     else
         subj="$ICON_WARN Chibirobo ran with errors"
     fi
