@@ -3,7 +3,7 @@
 set -e
 
 quote()
-{ 
+{
     local quoted="${1//\'/\'\\\'\'}"
     printf "'%s'" "$quoted"
 }
@@ -87,22 +87,27 @@ if ! [ -d "$nkd" ]; then
     fatal "$nkd does not exist."
 fi
 
-if ! [ -e "$nkd/.patched" ]; then
+if [[ ! -e $nkd/.patched && -d /etc/eebydeeby/kernel-patches.d ]]; then
     echo "Patching $nv..."
-    while read -r patch; do
+    while read -rd '' patch; do
         echo "	applying $patch..."
         patch -d "$nkd" -p1 < "$patch"
-    done < "$0.patches"
+    done < <(find /etc/eebydeeby/kernel-patches.d -maxdepth 1 -type f -name '*.patch' -print0)
     touch "$nkd/.patched"
     echo "$nv patched"
 fi
 
-if ! [ -f "$nkd/.config" ]; then
-    echo "Copying config from $cv to $nv and configuring $nv..."
+if [[ ! -f $nkd/.configured ]]; then
+    echo "Configuring $nv..."
 
-    cp {"$ckd","$nkd"}/.config
+    if [[ ! -f $nkd/.config ]]; then
+        echo "Copying config from $cv"
 
-    ( cd "$nkd" && make oldconfig )
+        cp {"$ckd","$nkd"}/.config
+    fi
+
+    make -C "$nkd" oldconfig
+    touch "$nkd"/.configured
 else
     echo "Kernel $nv is already configured."
 fi
@@ -111,12 +116,13 @@ echo "Building $nv..."
 
 log="$(mktemp)"
 
-(
-    cd "$nkd"
-    ( make -j9 -l7 bzImage modules > "$log" && \
-      make modules_install > "$log" ) || \
-    { cat "$log" ; fatal "Kernel failed to compile"; }
-)
+{
+    make -C "$nkd" -j9 -l7 bzImage modules > "$log" && \
+    make -C "$nkd" modules_install > "$log"
+} || {
+    cat "$log"
+    fatal "Kernel failed to compile"
+}
 
 if [ -h /usr/src/linux ]; then
     rm /usr/src/linux
@@ -128,18 +134,17 @@ ln -s "linux-$nv" /usr/src/linux
 
 echo "Installing $nv..."
 
-if ! cut -d' ' -f2 /proc/mounts | grep -Fqx /boot; then
+if ! mountpoint -q /boot; then
     mount /boot
     mounted=true
 fi
 
-(
-    cd "$nkd"
-    make install
-)
+make -C "$nkd" install
 
 echo "Loading new kernel with kexec"
 kexec -l "/boot/vmlinuz-$nv" --initrd "/boot/initramfs-$nv.img" --reuse-cmdline -a
 
-[ "$mounted" = true ] && umount /boot
+if [[ -v mounted ]]; then
+    umount /boot
+fi
 
