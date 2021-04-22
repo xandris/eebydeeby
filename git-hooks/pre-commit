@@ -12,8 +12,13 @@ fi
 if type shellcheck > /dev/null; then
     for i in eebydeeby ebdb-kernel git-hooks/*; do
         case "$(git status --porcelain "$i")" in
-        ?M*)
+        [MA]'  '*)
             shellcheck "$i"
+            ;;
+        [MA][MD]' '*)
+            echo "Checking dirty path $i"
+            git show :"$i" | shellcheck -
+            ;;
         esac
     done
 fi
