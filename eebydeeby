@@ -3,6 +3,7 @@
 set -m
 
 if [[ -e /etc/profile.env ]]; then
+    # shellcheck disable=SC1091
     source /etc/profile.env
 fi
 
@@ -89,7 +90,7 @@ journalled() {
             echo
             echo "Standard output was:"
             echo
-            sed 's/^/\t/' < "$stdout" 
+            sed 's/^/\t/' < "$stdout"
             echo
             echo "Standard error was:"
             echo
@@ -117,7 +118,7 @@ email() {
 
     {
         echo "From: $recipients"
-        echo "Subject: $ICON_ROBOT $HOSTNAME: $subject" 
+        echo "Subject: $ICON_ROBOT $HOSTNAME: $subject"
         echo "Content-Type: text/html; charset=utf-8"
         echo
         {
