@@ -1,0 +1,10 @@
+#!/usr/bin/env -S -i bash
+
+. /etc/profile.env
+
+export FEATURES=-candy
+
+emerge -1q \
+    --accept-properties=-interactive \
+    --accept-restrict=-fetch \
+    @module-rebuild

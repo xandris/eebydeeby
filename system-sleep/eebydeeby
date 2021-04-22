@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+case "$1" in
+    pre)
+        /usr/sbin/rtcwake -m no --date tomorrow
+        ;;
+    post)
+        /usr/sbin/rtcwake -m disable
+        ;;
+esac

@@ -140,7 +140,7 @@ cleanup() {
             cat < "$tmpdir/$i" >> /var/log/"$i"
         fi
     done
-    [ -f "$tmpdir"/.chibirobo ] && rm -rf "$tmpdir"
+    [ -f "$tmpdir"/.eebydeeby ] && rm -rf "$tmpdir"
 }
 
 do-sync() {
@@ -169,7 +169,7 @@ installed-size() {
 }
 
 update-kernel() {
-    command update-kernel "$@" >/dev/null
+    ebdb-kernel "$@" >/dev/null
 }
 
 eclean-distfiles() {
@@ -208,7 +208,7 @@ inhibit-suspend() {
         env -i DBUS_SESSION_BUS_ADDRESS=unix:path="$bus" \
         sudo --preserve-env=DBUS_SESSION_BUS_ADDRESS \
              --user="$name" \
-             gnome-session-inhibit --inhibit suspend --inhibit-only --reason "Chibirobo is doing some cleaning..." >/dev/null &
+             gnome-session-inhibit --inhibit suspend --inhibit-only --reason "Eebydeeby is doing some cleaning..." >/dev/null &
     done
 }
 
@@ -248,7 +248,7 @@ export DIFF_FORMAT_NEW=
 export DIFF_FORMAT_DELETE=
 export DIFF_ONLY_INSTALLED=true
 
-touch "$tmpdir/.chibirobo" || exit 1
+touch "$tmpdir/.eebydeeby" || exit 1
 
 {
     equery l -F "\$cpv" @module-rebuild | \
@@ -331,9 +331,9 @@ if [[ -z $verbose ]]; then
     if [[ -n $badnews ]]; then
         subj="$ICON_ERR ${badnews}"
     elif (( errors == 0 )); then
-        subj="$ICON_OK Chibirobo ran successfully"
+        subj="$ICON_OK Eebydeeby ran successfully"
     else
-        subj="$ICON_WARN Chibirobo ran with errors"
+        subj="$ICON_WARN Eebydeeby ran with errors"
     fi
     email "$subj" < "$tmpdir"/journal.txt
 fi

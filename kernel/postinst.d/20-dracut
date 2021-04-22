@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+version="$1"
+image="$2"
+
+dracut --kver="$version" --force
