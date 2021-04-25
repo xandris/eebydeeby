@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# vi: et ts=4 sw=4
 
 set -m
 
@@ -186,7 +187,7 @@ is-network-up() {
 }
 
 wait-for-network() {
-    local retries=6
+    local retries=30
     sleep 10
     until is-network-up; do
         sleep 10
@@ -211,6 +212,18 @@ inhibit-suspend() {
              --user="$name" \
              gnome-session-inhibit --inhibit suspend --inhibit-only --reason "Eebydeeby is doing some cleaning..." >/dev/null &
     done
+}
+
+fix-repo-perms() {
+    local repo owner path
+
+    while read -r repo owner; do
+        path="$(portageq get_repo_path / "$repo")" || continue
+        chown -cR "$owner" "$path"
+        chmod -cR g+rX "$path"
+    done < <( portageq repos_config / | \
+        awk 'match($0,/^\[(.*)]/,a){repo=a[1]} $1=="sync-user"{print repo, " ", $3}' \
+    )
 }
 
 verbose=
@@ -268,25 +281,33 @@ fi
 main() {
     inhibit-suspend
 
-    if ! is-network-up; then
-        journalled --icon "$ICON_WAIT" "Wait for the network to come up" wait-for-network
+    if ! journalled --icon="$ICON_CLEAN" fix-repo-perms ; then
+        badnews="Couldn't fix the repository perms"
+        return 1
+    fi
+
+    if ! is-network-up && \
+        ! journalled --icon "$ICON_WAIT" "Wait for the network to come up" wait-for-network
+    then
+        badnews="The network didn't come up in time"
+        return 1
     fi
 
     if [ -z "$nosync" ]; then
         if ! journalled "Synchronize the repositories" do-sync; then
             badnews="Failed to synchronize!"
-            return
+            return 1
         fi
     fi
 
     if ! journalled "Update @world" do-emerge; then
         badnews="Failed to update @world!"
-        return
+        return 1
     fi
 
     if ! journalled "Ensure linking consistency" revdep-rebuild; then
         badnews="Failed to ensure linking consistency!"
-        return
+        return 1
     fi
 
     grep -F ') Merging (' "$tmpdir"/emerge.log | awk -v FS='[():]' '{print $5}' > "$tmpdir"/merged.txt
