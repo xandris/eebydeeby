@@ -215,12 +215,18 @@ inhibit-suspend() {
 }
 
 fix-repo-perms() {
-    local repo owner path
+    local repo owner path chowned chmoded
 
     while read -r repo owner; do
         path="$(portageq get_repo_path / "$repo")" || continue
-        chown -cR "$owner" "$path"
-        chmod -cR g+rX "$path"
+        chowned=$(chown -cR "$owner" "$path" | wc -l)
+        chmoded=$(chmod -cR g+rX "$path" | wc -l)
+        if (( chowned > 0 || chmoded > 0 )); then
+            echo "Files changed!"
+            echo
+            printf "${TAB}Owner changed to %s: %5d" "$owner" "$chowned"
+            printf "${TAB}Mode changed:        %5d" "$chmoded"
+        fi
     done < <( portageq repos_config / | \
         awk 'match($0,/^\[(.*)]/,a){repo=a[1]} $1=="sync-user"{print repo, " ", $3}' \
     )
