@@ -106,7 +106,13 @@ if [[ ! -f $nkd/.configured ]]; then
         cp {"$ckd","$nkd"}/.config
     fi
 
-    make -C "$nkd" oldconfig
+    if [ -t 0 ]; then
+      tgt=oldconfig
+    else
+      tgt=olddefconfig
+    fi
+
+    make -C "$nkd" "$tgt"
     touch "$nkd"/.configured
 else
     echo "Kernel $nv is already configured."

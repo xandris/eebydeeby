@@ -335,7 +335,7 @@ main() {
 
     if ! update-kernel --check; then
         local nv
-        nv="$(update-kernel --newest)"
+        nv="$(ebdb-kernel --newest)"
         if journalled "Update to Linux kernel $nv." update-kernel; then
             journalled --icon "$ICON_CLEAN" "Clean old kernels." eclean-kernel -n 3
         fi
