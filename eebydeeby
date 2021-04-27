@@ -221,6 +221,7 @@ fix-repo-perms() {
         path="$(portageq get_repo_path / "$repo")" || continue
         chowned=$(chown -cR "$owner" "$path" | wc -l)
         chmoded=$(chmod -cR g+rX "$path" | wc -l)
+        git -C "$path" update-index -q --refresh
         if (( chowned > 0 || chmoded > 0 )); then
             echo "Files changed!"
             echo
