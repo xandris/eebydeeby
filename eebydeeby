@@ -227,8 +227,12 @@ fix-repo-perms() {
         if (( chowned > 0 || chmoded > 0 )); then
             echo "Files changed!"
             echo
-            printf "${TAB}Owner changed to %s: %5d" "$owner" "$chowned"
-            printf "${TAB}Mode changed:        %5d" "$chmoded"
+            if (( chowned > 0 )); then
+                printf "${TAB}Owner changed to %s: %5d\n" "$owner" "$chowned"
+            fi
+            if (( chmoded > 0 )); then
+                printf "${TAB}Mode changed:        %5d\n" "$chmoded"
+            fi
         fi
     done < <( portageq repos_config / | \
         awk 'match($0,/^\[(.*)]/,a){repo=a[1]} $1=="sync-user"{print repo, " ", $3}' \
