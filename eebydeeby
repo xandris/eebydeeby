@@ -175,7 +175,7 @@ update-kernel() {
 }
 
 eclean-distfiles() {
-    command eclean -d distfiles -f "$@" | tail -n 10
+    command eclean -d distfiles -f "$@" | tail -n 20
 }
 
 revdep-rebuild() {
@@ -290,7 +290,7 @@ fi
 main() {
     inhibit-suspend
 
-    if ! journalled --icon="$ICON_CLEAN" fix-repo-perms ; then
+    if ! journalled --icon "$ICON_CLEAN" fix-repo-perms ; then
         badnews="Couldn't fix the repository perms"
         return 1
     fi
