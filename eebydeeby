@@ -28,6 +28,16 @@ declare -r ICON_CLEAN=$'\xf0\x9f\xa7\xb9'
 declare -r ICON_WAIT="⏳"
 declare -r BULLET="•"
 
+declare REBUILD_OLD_MONTHS=3
+
+plural() {
+    if [[ $3 -ne 1 ]]; then
+        echo "$1"
+    else
+        echo "$2"
+    fi
+}
+
 style() {
     echo "$*$NORM"
 }
@@ -145,6 +155,25 @@ do-emerge() {
     >/dev/null
 }
 
+rebuild-old() {
+    local -a atoms
+    local oldest="$(( $(date +%s) - 60*60*24*30*REBUILD_OLD_MONTHS ))"
+
+    mapfile -t atoms < <(
+        eix '-I*' --format '<installedversions:DATESORT>' \
+        | awk -v OLDEST="$oldest" '$1<OLDEST { print $4 }' \
+        | grep -Fxv '' \
+        | grep -Ev '^acct-(group|user)/'
+    )
+
+    if [[ ${#atoms[@]} -gt 0 ]]; then
+        echo "Rebuilding ${#atoms[@]} old $(plural package packages "${#atoms[@]}")."
+        emerge --color n --keep-going --oneshot -qv --accept-properties=-interactive --accept-restrict=-fetch "${atoms[@]}" >/dev/null
+    else
+        echo "No old packages found."
+    fi
+}
+
 installed-size() {
     equery -q size -b \* \
     | sed 's/.*size(\([0-9]\+\))/\1/' \
@@ -198,14 +227,21 @@ inhibit-suspend() {
 
 fix-repo-perms() {
     local repo owner path chowned chmoded
+    local -a gitsudo=()
 
     while read -r repo owner; do
         path="$(portageq get_repo_path / "$repo")" || continue
         chowned=$(chown -cR "$owner" "$path" | wc -l)
         chmoded=$(chmod -cR g+rX "$path" | wc -l)
-        if [[ -d "$path"/.git ]]; then
-            git -C "$path" update-index -q --refresh
+
+        if (( UID == 0 )); then
+            gitsudo=( sudo -u "${owner%:*}" )
         fi
+
+        if [[ -d "$path"/.git ]]; then
+            "${gitsudo[@]}" git -C "$path" update-index -q --refresh
+        fi
+
         if (( chowned > 0 || chmoded > 0 )); then
             printf 'Files changed in repository "%s"!\n\n' "$repo"
             if (( chowned > 0 )); then
@@ -253,7 +289,7 @@ while [ $# -gt 0 ]; do
         verbose=1;;
     -q|--quiet)
         verbose=;;
-    -n|--nosync)
+    -n|--no-sync)
         nosync=1;;
     -h|--help)
         usage
@@ -346,14 +382,14 @@ main() {
         fi
     fi
 
-    if ! journalled "Update @world" do-emerge; then
-        badnews="Failed to update @world!"
-        return 1
+    if journalled "Update @world" do-emerge; then
+        journalled "Rebuild old packages" rebuild-old
+    else
+        badnews="${badnews} Failed to update @world!"
     fi
 
     if ! journalled "Ensure linking consistency" revdep-rebuild; then
-        badnews="Failed to ensure linking consistency!"
-        return 1
+        badnews="${badnews} Failed to ensure linking consistency!"
     fi
 
     grep -F ') Merging (' "$tmpdir"/emerge.log | awk -v FS='[():]' '{print $5}' > "$tmpdir"/merged.txt
