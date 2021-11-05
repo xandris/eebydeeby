@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vi: et ts=4 sw=4
 
-set -m
+set -mo pipefail
 
 if [[ -e /etc/profile.env ]]; then
     # shellcheck disable=SC1091
@@ -416,7 +416,19 @@ main() {
         journalled "Update the initial ram disk." dracut --force
     fi
 
-    : | needrestart -qnrl | grep -Fv 'systemctl restart user@' > "$tmpdir"/needrestart.txt
+    local torestart=()
+    mapfile -t torestart < <(
+        needrestart -b | awk '$1=="NEEDRESTART-SVC:"{print $2}' | grep -v '^user@'
+    )
+
+    if [[ ${#torestart} -gt 0 ]]; then
+        {
+            echo "${torestart[@]}" | tr ' ' '\n' | sed '/^/\t/'
+            systemctl restart "${torestart[@]}"
+        } | journal  --icon "$ICON_WARN" "Restarting these services:" || {
+            badnews="${badnews} Failed to restart services."
+        }
+    fi
 
     if [[ -s "$tmpdir"/needrestart.txt ]]; then
         sed 's/^/\t/' < "$tmpdir"/needrestart.txt \
