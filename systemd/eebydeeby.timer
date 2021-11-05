@@ -1,0 +1,6 @@
+[Unit]
+Description=Timer unit for Eebydeeby.
+
+[Timer]
+OnCalendar=Sat *-*-* 04:00:00
+WakeSystem=true

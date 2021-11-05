@@ -1,0 +1,6 @@
+[Unit]
+Description=Eeebdeeby, the janky automated Gentoo custodian. Beep!
+
+[Service]
+Type=exec
+ExecStart=eebydeeby
