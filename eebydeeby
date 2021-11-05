@@ -31,7 +31,7 @@ declare -r BULLET="•"
 declare REBUILD_OLD_MONTHS=3
 
 plural() {
-    if [[ $3 -ne 1 ]]; then
+    if [[ $3 -eq 1 ]]; then
         echo "$1"
     else
         echo "$2"
