@@ -1,6 +1,9 @@
 [Unit]
 Description=Timer unit for Eebydeeby.
 
+[Install]
+WantedBy=timers.target
+
 [Timer]
 OnCalendar=Sat *-*-* 04:00:00
 WakeSystem=true
