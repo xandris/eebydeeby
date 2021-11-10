@@ -143,7 +143,7 @@ do-sync() {
 
     if [[ -s $tmpdir/eix-diff.txt ]]; then
         {
-            echo "These installed packages got updated by the Gentoo maintainers:"
+            echo "These installed packages received updates:"
             echo
             cat "$tmpdir"/eix-diff.txt
         } | email "$ICON_NEW Repository updates!"
@@ -151,8 +151,24 @@ do-sync() {
 }
 
 do-emerge() {
+    local rmmod=()
+
+    if emerge -pvnuN --nodeps www-client/firefox mail-client/thunderbird \
+        | grep -Eo -- '-?pgo\b' \
+        | grep -Fxq pgo; then
+
+        if [[ ! -d /sys/modules/nvidia ]]; then
+            modprobe nvidia
+            rmmod+=( nvidia_drm nvidia_uvm nvidia_modeset nvidia )
+        fi
+    fi
+
     emerge --color n --keep-going -qvuDN --with-bdeps=y --accept-properties=-interactive --accept-restrict=-fetch @world \
-    >/dev/null
+        > /dev/null
+
+    if [[ ${#rmmod[@]} -gt 0 ]]; then
+        rmmod "${rmmod[@]}" || :
+    fi
 }
 
 rebuild-old() {
@@ -423,16 +439,11 @@ main() {
 
     if [[ ${#torestart} -gt 0 ]]; then
         {
-            echo "${torestart[@]}" | tr ' ' '\n' | sed '/^/\t/'
+            echo "${torestart[@]}" | tr ' ' '\n' | sed 's/^/\t/'
             systemctl restart "${torestart[@]}"
         } | journal  --icon "$ICON_WARN" "Restarting these services:" || {
             badnews="${badnews} Failed to restart services."
         }
-    fi
-
-    if [[ -s "$tmpdir"/needrestart.txt ]]; then
-        sed 's/^/\t/' < "$tmpdir"/needrestart.txt \
-        | journal --icon "$ICON_WARN" "These services need to be restarted:"
     fi
 
     journalled --icon "$ICON_CLEAN" "Clean the distfiles" eclean-distfiles
