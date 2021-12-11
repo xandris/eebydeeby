@@ -171,6 +171,13 @@ do-emerge() {
     fi
 }
 
+do-restart() {
+    systemctl restart "${torestart[@]}"
+    if [[ -v reexec_systemd ]]; then
+        systemctl daemon-reexec
+    fi
+}
+
 rebuild-old() {
     local -a atoms
     local oldest="$(( $(date +%s) - 60*60*24*30*REBUILD_OLD_MONTHS ))"
@@ -432,19 +439,42 @@ main() {
         journalled "Update the initial ram disk." dracut --force
     fi
 
+    local needrestart=
     local torestart=()
-    mapfile -t torestart < <(
-        needrestart -b | awk '$1=="NEEDRESTART-SVC:"{print $2}' | grep -v '^user@'
-    )
+    local svc
 
-    if [[ ${#torestart} -gt 0 ]]; then
+    while read -r svc; do
+        case "$svc" in
+        user@*|eebydeeby.*)
+            ;;
+        systemd-manager)
+            local reexec_systemd=1
+            needrestart=1
+            ;;
+        *.service)
+            torestart+=( "$svc" )
+            needrestart=1
+        esac
+    done < <(needrestart -b | awk '$1=="NEEDRESTART-SVC:"{print $2}')
+
+    if [[ -n $needrestart ]]; then
+        local i
+
         {
-            echo "${torestart[@]}" | tr ' ' '\n' | sed 's/^/\t/'
-            systemctl restart "${torestart[@]}"
-        } | journal  --icon "$ICON_WARN" "Restarting these services:" || {
+            for i in "${torestart[@]}"; do
+                printf '\t%s\n' "$i"
+            done
+
+            if [[ -v reexec_systemd ]]; then
+                echo $'\tSystemd itself'
+            fi
+        } | journal  --icon "$ICON_WARN" "Need to restart these services:"
+
+        if ! journalled --icon "$ICON_INFO" "Restarting services" do-restart; then
             badnews="${badnews} Failed to restart services."
-        }
+        fi
     fi
+
 
     journalled --icon "$ICON_CLEAN" "Clean the distfiles" eclean-distfiles
 
