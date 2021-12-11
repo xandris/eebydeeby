@@ -16,4 +16,4 @@ all:
 install:
 	 $(INSTALL_PROGRAM) -D eebydeeby ebdb-kernel --target-directory '$(DESTDIR)$(sbindir)'
 	 $(INSTALL_PROGRAM) -D kernel/postinst.d/*   --target-directory '$(DESTDIR)$(sysconfdir)/kernel/postinst.d'
-	 $(INSTALL_PROGRAM) -D systemd/*             --target-directory '$(DESTDIR)$(libdir)/systemd/system'
+	 $(INSTALL_DATA)    -D systemd/*             --target-directory '$(DESTDIR)$(libdir)/systemd/system'
