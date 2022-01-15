@@ -232,22 +232,6 @@ wait-for-network() {
     done
 }
 
-inhibit-suspend() {
-    local -a uids
-    mapfile -t uids < <(systemctl show user@\*.service -P UID|grep -Fxv '')
-    for i in "${uids[@]}"; do
-        local name bus="/run/user/$i/bus"
-        if ! [[ -S $bus ]]; then
-            continue
-        fi
-        name="$(getent passwd "$i"|cut -d: -f1)"
-        env -i DBUS_SESSION_BUS_ADDRESS=unix:path="$bus" \
-        sudo --preserve-env=DBUS_SESSION_BUS_ADDRESS \
-             --user="$name" \
-             gnome-session-inhibit --inhibit suspend --inhibit-only --reason "Eebydeeby is doing some cleaning..." >/dev/null &
-    done
-}
-
 fix-repo-perms() {
     local repo owner path chowned chmoded
     local -a gitsudo=()
@@ -384,8 +368,6 @@ else
 fi
 
 main() {
-    inhibit-suspend
-
     if ! journalled --icon "$ICON_CLEAN" "Fix repository permissions" fix-repo-perms ; then
         badnews="Couldn't fix the repository perms"
         return 1
