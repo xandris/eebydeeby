@@ -30,6 +30,10 @@ newest-version() {
     echo "$nv"
 }
 
+list-new-kconfig() {
+    make -sC "$nkd" KCONFIG_CONFIG="$ckd"/.config listnewconfig
+}
+
 usage() {
     cat<<EOF
 Usage: $0 <options> <new version>
@@ -44,6 +48,8 @@ Options:
 \t-c --check\t\tReturn 0 if symlink up to date, 1 otherwise
 
 \t-n --newest\t\tPrint the newest kernel available
+
+\t-l --list-new-kconfig\t\tList new KConfig options
 EOF
 }
 
@@ -55,6 +61,7 @@ fatal() {
 cv="$(uname -r)"
 csl="$(readlink -f /usr/src/linux)"
 ckd="/usr/src/linux-$cv"
+listnew=
 
 case "$1" in
 -h|--help)
@@ -68,6 +75,10 @@ case "$1" in
 -n|--newest)
     newest-version
     exit
+    ;;
+-l|--list-new-kconfig)
+    listnew=1
+    shift
     ;;
 *)
     nv="$1"
@@ -85,6 +96,11 @@ nkd="/usr/src/linux-$nv"
 
 if ! [ -d "$nkd" ]; then
     fatal "$nkd does not exist."
+fi
+
+if [[ -n $listnew ]]; then
+    list-new-kconfig
+    exit
 fi
 
 if [[ ! -e $nkd/.patched && -d /etc/eebydeeby/kernel-patches.d ]]; then

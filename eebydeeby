@@ -412,8 +412,16 @@ main() {
     wait "$equery_job"
 
     if ! update-kernel --check; then
+        local newkconfig
         local nv
         nv="$(ebdb-kernel --newest)"
+        newkconfig="$(ebdb-kernel --list-new-kconfig)"
+        if [[ -n $newkconfig ]]; then
+            printf "These kernel options are new:\n\n%s\n\nDon't worry, I didn't set them for you!" \
+                "$newkconfig" | journal --icon "$ICON_NEW" "New kernel options:"
+            unset newkconfig
+        fi
+
         if journalled "Update to Linux kernel $nv." update-kernel; then
             journalled --icon "$ICON_CLEAN" "Clean old kernels." eclean-kernel -n 3
         fi
