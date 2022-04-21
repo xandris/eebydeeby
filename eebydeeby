@@ -146,7 +146,12 @@ do-sync() {
             echo "These installed packages received updates:"
             echo
             cat "$tmpdir"/eix-diff.txt
+
         } | email "$ICON_NEW Repository updates!"
+
+        if [[ $(eselect news count new) != 0 ]]; then
+            eselect news read | email "$ICON_NEW Gentoo News!"
+        fi
     fi
 }
 
