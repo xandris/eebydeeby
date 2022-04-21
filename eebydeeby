@@ -354,11 +354,12 @@ else
 
     email() {
 
-        subject="$1"
+        subject="$ICON_ROBOT $HOSTNAME: $1"
+        subject="=?utf-8?B?$(basenc --base64 -w0 <<< "$subject")?="
 
         {
             echo "From: $recipients"
-            echo "Subject: $ICON_ROBOT $HOSTNAME: $subject"
+            echo "Subject: $subject"
             echo "Content-Type: text/html; charset=utf-8"
             echo
             {
