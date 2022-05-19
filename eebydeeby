@@ -213,6 +213,45 @@ update-kernel() {
     ebdb-kernel "$@" >/dev/null
 }
 
+# Usage: is-initrd-valid
+#
+# Returns true if initrd is valid, false otherwise. Here, "valid"
+# means the kernel modules in the initrd match the local filesystem.
+#
+# Having out-of-date files in the initrd isn't always a problem as
+# long as they're consistent with each other since the root filesystem
+# in the initrd will be left behind after pivoting to the real root
+# filesystem. However, kernel modules loaded this way persist even
+# after the pivot; the kernel doesn't load newer kernel modules from
+# the real root.
+is-initrd-valid() {
+    # Ideally, find the initramfs that will boot next time. That's too much work though.
+    # Alternatively, we could loop through all initrds, but that's time consuming.
+    local initramfs
+    initramfs="$(
+        find /boot -maxdepth 1 -type f -name '*.img' -print0 \
+        | sort -zVr | head -zn1 | tr -d '\000'
+    )" || return $?
+
+    if ! [[ -f $initramfs ]]; then
+        return 1
+    fi
+
+    mkdir "$tmpdir"/initrd && (
+        cd "$tmpdir"/initrd \
+        && lsinitrd --unpack "$initramfs" lib/modules/\*.ko \
+        || exit $?
+    ) || return $?
+
+    while read -r f; do
+        if ! cmp -s "/$f" "$tmpdir/initrd/$f"; then
+            return 1
+        fi
+    done < <(cd "$tmpdir"/initrd && find . -type f)
+
+    return 0
+}
+
 eclean-distfiles() {
     command eclean -d distfiles -f "$@" | tail -n 20
 }
@@ -377,8 +416,8 @@ fi
 
 main() {
     if ! journalled --icon "$ICON_CLEAN" "Fix repository permissions" fix-repo-perms ; then
-        badnews="Couldn't fix the repository perms"
-        return 1
+       badnews="Couldn't fix the repository perms"
+       return 1
     fi
 
     if ! is-network-up && \
@@ -433,8 +472,8 @@ main() {
         if journalled "Update to Linux kernel $nv." update-kernel; then
             journalled --icon "$ICON_CLEAN" "Clean old kernels." eclean-kernel -n 3
         fi
-    elif grep -qFf "$tmpdir"/dracut-packages.txt < "$tmpdir"/merged.txt; then
-        journalled "Update the initial ram disk." dracut --force
+    elif ! is-initrd-valid; then
+        journalled "Repair the initial ram disk." dracut --force
     fi
 
     local needrestart=
