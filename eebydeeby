@@ -222,7 +222,9 @@ revdep-rebuild() {
 }
 
 is-network-up() {
-    [[ $(nmcli network connectivity check) == full ]]
+    networkctl list --no-legend \
+    | awk '{print $4}' \
+    | grep -qFx routable
 }
 
 wait-for-network() {
