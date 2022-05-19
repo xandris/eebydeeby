@@ -134,7 +134,7 @@ cleanup() {
             cat < "$tmpdir/$i" >> /var/log/"$i"
         fi
     done
-    [ -f "$tmpdir"/.eebydeeby ] && rm -rf "$tmpdir"
+    [[ -f $tmpdir/.eebydeeby ]] && rm -rf "$tmpdir"
 }
 
 do-sync() {
