@@ -168,8 +168,8 @@ do-emerge() {
         fi
     fi
 
-    emerge --color n --keep-going -qvuDN --with-bdeps=y --accept-properties=-interactive --accept-restrict=-fetch @world \
-        > /dev/null
+    emerge --autounmask n --color n --keep-going -qvuDN --with-bdeps=y --accept-properties=-interactive --accept-restrict=-fetch @world \
+        > /dev/null || return $?
 
     if [[ ${#rmmod[@]} -gt 0 ]]; then
         rmmod "${rmmod[@]}" || :
