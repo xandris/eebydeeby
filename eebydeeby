@@ -163,8 +163,8 @@ do-emerge() {
         | grep -Fxq pgo; then
 
         if [[ ! -d /sys/modules/nvidia ]]; then
-            modprobe nvidia
-            rmmod+=( nvidia_drm nvidia_uvm nvidia_modeset nvidia )
+            modprobe nvidia \
+            && rmmod+=( nvidia_drm nvidia_uvm nvidia_modeset nvidia )
         fi
     fi
 
