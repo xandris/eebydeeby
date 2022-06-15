@@ -506,6 +506,8 @@ equery_job=$!
 
 if [[ -n $verbose ]]; then
     email() {
+        local subject="$ICON_ROBOT $HOSTNAME: $1"
+
         echo
         echo "$subject"
         echo
@@ -518,7 +520,7 @@ else
 
     email() {
 
-        subject="$ICON_ROBOT $HOSTNAME: $1"
+        local subject="$ICON_ROBOT $HOSTNAME: $1"
         subject="=?utf-8?B?$(basenc --base64 -w0 <<< "$subject")?="
 
         {
