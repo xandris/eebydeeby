@@ -3,4 +3,7 @@ Description=Eeebdeeby, the janky automated Gentoo custodian. Beep!
 
 [Service]
 Type=exec
+# Hack to workaround https://github.com/systemd/systemd/issues/14045
+# Wait until sleep is over
+ExecStartPre=bash -c "while ! systemd-inhibit --mode=block true; do sleep 1; done"
 ExecStart=systemd-inhibit --mode=block --who="Eebydeeby" --why="Performing maintenance." eebydeeby
