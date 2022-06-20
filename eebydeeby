@@ -367,7 +367,9 @@ main() {
         if journalled "Update to Linux kernel $nv." update-kernel; then
             journalled --icon "$ICON_CLEAN" "Clean old kernels." eclean-kernel -n 3
         fi
-    elif ! is-initrd-valid; then
+    fi
+
+    if ! is-initrd-valid; then
         journalled "Repair the initial ram disk." dracut --force
     fi
 
