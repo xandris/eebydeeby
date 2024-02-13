@@ -202,13 +202,6 @@ rebuild-old() {
     fi
 }
 
-installed-size() {
-    equery -q size -b \* \
-    | sed 's/.*size(\([0-9]\+\))/\1/' \
-    | awk 'BEGIN{x=0}{x+=$0}END{print x}' \
-    | numfmt --to=iec-i --format=%fB
-}
-
 update-kernel() {
     ebdb-kernel "$@" >/dev/null
 }
@@ -351,8 +344,6 @@ main() {
         } | journal --icon "$ICON_INFO" "I merged these packages:"
     fi
 
-    wait "$equery_job"
-
     if ! update-kernel --check; then
         local newkconfig
         local nv
@@ -413,7 +404,7 @@ main() {
     journalled --icon "$ICON_CLEAN" "Clean the distfiles" eclean-distfiles
 
     echo "Goodbye!" \
-    | journal --icon "$ICON_INFO" "Total installed package size is now: ${CSI}${FG}${YELLOW}m$(installed-size)"
+    | journal --icon "$ICON_INFO" "Install size: ${CSI}${FG}${YELLOW}m$(qsize -s)"
 }
 
 
@@ -498,13 +489,6 @@ export DIFF_FORMAT_DELETE=
 export DIFF_ONLY_INSTALLED=true
 
 touch "$tmpdir/.eebydeeby" || exit 1
-
-{
-    equery l -F \$cpv @module-rebuild | \
-        tail -n +1 > "$tmpdir"/dracut-packages.txt
-} &
-equery_job=$!
-
 
 if [[ -n $verbose ]]; then
     email() {
