@@ -404,7 +404,7 @@ main() {
     journalled --icon "$ICON_CLEAN" "Clean the distfiles" eclean-distfiles
 
     echo "Goodbye!" \
-    | journal --icon "$ICON_INFO" "Install size: ${CSI}${FG}${YELLOW}m$(qsize -s)"
+    | journal --icon "$ICON_INFO" "Install size: ${CSI}${FG}${YELLOW}m$(qsize -S)"
 }
 
 
