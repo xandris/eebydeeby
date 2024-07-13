@@ -2,40 +2,39 @@
 
 set -e
 
-quote()
-{
-    local quoted="${1//\'/\'\\\'\'}"
-    printf "'%s'" "$quoted"
+quote() {
+  local quoted="${1//\'/\'\\\'\'}"
+  printf "'%s'" "$quoted"
 }
 
 quote-all() {
-    while [ $# -gt 0 ]; do
-    	quote "$1"
-    	shift
-    	echo -n ' '
-    done
+  while [ $# -gt 0 ]; do
+    quote "$1"
+    shift
+    echo -n ' '
+  done
 }
 
 if [[ $(id -ng) != portage ]]; then
-    exec sg portage "$(quote-all "$0" "$@")"
+  exec sg portage "$(quote-all "$0" "$@")"
 fi
 
 umask 022
 
 newest-version() {
-    local nv
-    nv="$( find /usr/src -maxdepth 1 -type d -name 'linux-*' -printf '%f\0' \
-	| sort -zVr | head -zn1 | tr -d '\0' )"
-    nv="${nv#linux-}"
-    echo "$nv"
+  local nv
+  nv="$(find /usr/src -maxdepth 1 -type d -name 'linux-*' -printf '%f\0' |
+    sort -zVr | head -zn1 | tr -d '\0')"
+  nv="${nv#linux-}"
+  echo "$nv"
 }
 
 list-new-kconfig() {
-    make -sC "$nkd" KCONFIG_CONFIG="$ckd"/.config listnewconfig
+  make -sC "$nkd" KCONFIG_CONFIG="$ckd"/.config listnewconfig
 }
 
 usage() {
-    cat<<EOF
+  cat <<EOF
 Usage: $0 <options> <new version>
 Current symlink: $csl
 Current version: $cv
@@ -54,8 +53,8 @@ EOF
 }
 
 fatal() {
-    echo "$@"
-    exit 1
+  echo "$@"
+  exit 1
 }
 
 cv="$(uname -r)"
@@ -64,74 +63,78 @@ ckd="/usr/src/linux-$cv"
 listnew=
 
 case "$1" in
--h|--help)
-    usage
-    exit
-    ;;
--c|--check)
-    [[ "$(newest-version)" == "${csl#*linux-}" ]] || exit $?
-    exit
-    ;;
--n|--newest)
-    newest-version
-    exit
-    ;;
--l|--list-new-kconfig)
-    listnew=1
-    shift
-    ;;
+-h | --help)
+  usage
+  exit
+  ;;
+-c | --check)
+  [[ "$(newest-version)" == "${csl#*linux-}" ]] || exit 1
+  exit
+  ;;
+-n | --newest)
+  newest-version
+  exit
+  ;;
+-l | --list-new-kconfig)
+  listnew=1
+  shift
+  ;;
 *)
-    nv="$1"
+  nv="$1"
+  ;;
 esac
 
 [ -d "$ckd" ] || fatal "$ckd" does not exist.
 
 if [ -z "$nv" ]; then
-    nv="$(newest-version)"
+  nv="$(newest-version)"
 fi
 
-[ -z "$nv" ] && { usage; exit 1; }
+[ -z "$nv" ] && {
+  usage
+  exit 1
+}
 
 nkd="/usr/src/linux-$nv"
 
 if ! [ -d "$nkd" ]; then
-    fatal "$nkd does not exist."
+  fatal "$nkd does not exist."
 fi
 
 if [[ -n $listnew ]]; then
-    list-new-kconfig
-    exit
+  list-new-kconfig
+  exit
 fi
 
 if [[ ! -e $nkd/.patched && -d /etc/eebydeeby/kernel-patches.d ]]; then
-    echo "Patching $nv..."
-    while read -rd '' patch; do
-        echo "	applying $patch..."
-        patch -d "$nkd" -p1 < "$patch"
-    done < <(find /etc/eebydeeby/kernel-patches.d -maxdepth 1 -type f -name '*.patch' -print0)
-    touch "$nkd/.patched"
-    echo "$nv patched"
+  echo "Patching $nv..."
+  while read -rd '' patch; do
+    echo "	applying $patch..."
+    patch -d "$nkd" -p1 <"$patch"
+  done < <(find /etc/eebydeeby/kernel-patches.d -maxdepth 1 -type f -name '*.patch' -print0)
+  touch "$nkd/.patched"
+  echo "$nv patched"
 fi
 
 if [[ ! -f $nkd/.configured ]]; then
-    echo "Configuring $nv..."
+  echo "Configuring $nv..."
 
-    if [[ ! -f $nkd/.config ]]; then
-        echo "Copying config from $cv"
+  if [[ ! -f $nkd/.config ]]; then
+    echo "Copying config from $cv"
 
-        cp {"$ckd","$nkd"}/.config
-    fi
+    cp {"$ckd","$nkd"}/.config
+  fi
 
-    if [ -t 0 ]; then
-      tgt=oldconfig
-    else
-      tgt=olddefconfig
-    fi
+  if [ -t 0 ]; then
+    tgt=oldconfig
+  else
+    tgt=olddefconfig
+  fi
 
-    make -C "$nkd" "$tgt"
-    touch "$nkd"/.configured
+  make -C "$nkd" "$tgt"
+  touch "$nkd"/.configured
 else
-    echo "Kernel $nv is already configured."
+  echo "Kernel $nv is already configured."
 fi
 
 echo "Building $nv..."
@@ -139,17 +142,17 @@ echo "Building $nv..."
 log="$(mktemp)"
 
 {
-    make -C "$nkd" -j9 -l7 bzImage modules > "$log" && \
-    make -C "$nkd" modules_install > "$log"
+  make -C "$nkd" -j9 -l7 bzImage modules >"$log" &&
+    make -C "$nkd" modules_install >"$log"
 } || {
-    cat "$log"
-    fatal "Kernel failed to compile"
+  cat "$log"
+  fatal "Kernel failed to compile"
 }
 
 if [ -h /usr/src/linux ]; then
-    rm /usr/src/linux
+  rm /usr/src/linux
 elif [ -e /usr/src/linux ]; then
-    fatal "/usr/src/linux exists but is not a symlink"
+  fatal "/usr/src/linux exists but is not a symlink"
 fi
 
 ln -s "linux-$nv" /usr/src/linux
@@ -157,16 +160,15 @@ ln -s "linux-$nv" /usr/src/linux
 echo "Installing $nv..."
 
 if ! mountpoint -q /boot; then
-    mount /boot
-    mounted=true
+  mount /boot
+  mounted=true
 fi
 
 make -C "$nkd" install
 
 echo "Loading new kernel with kexec"
-kexec -l "/boot/vmlinuz-$nv" --initrd "/boot/initramfs-$nv.img" --reuse-cmdline -a
+kexec -l "/boot/kernel-$nv" --initrd "/boot/initramfs-$nv.img" --reuse-cmdline -a
 
 if [[ -v mounted ]]; then
-    umount /boot
+  umount /boot
 fi
-
