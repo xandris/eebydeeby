@@ -43,7 +43,7 @@ style() {
 }
 
 oops() {
-    (( ++errors )) || :
+    ((++errors)) || :
 }
 
 journal() {
@@ -58,6 +58,7 @@ journal() {
             ;;
         *)
             break
+            ;;
         esac
     done
 
@@ -81,6 +82,7 @@ journalled() {
             ;;
         *)
             break
+            ;;
         esac
     done
 
@@ -98,10 +100,10 @@ journalled() {
         printf '%s' "${CSI}0E${CSI}K"
     fi
 
-    (( ret )) && icon="$ICON_ERR"
+    ((ret)) && icon="$ICON_ERR"
 
     {
-        if (( ret )); then
+        if ((ret)); then
             oops
             echo "This command failed with code $(style "$DATUM$ret"):"
             echo
@@ -109,11 +111,11 @@ journalled() {
             echo
             echo "Standard output was:"
             echo
-            sed 's/^/\t/' < "$stdout"
+            sed 's/^/\t/' <"$stdout"
             echo
             echo "Standard error was:"
             echo
-            sed 's/^/\t/' < "$stderr"
+            sed 's/^/\t/' <"$stderr"
         elif [[ -s "$stdout" ]]; then
             cat "$stdout"
         fi
@@ -131,15 +133,15 @@ cleanup() {
     wait
     for i in emerge{,-fetch}.log; do
         if [ -f "$tmpdir/$i" ]; then
-            cat < "$tmpdir/$i" >> /var/log/"$i"
+            cat <"$tmpdir/$i" >>/var/log/"$i"
         fi
     done
     [[ -f $tmpdir/.eebydeeby ]] && rm -rf "$tmpdir"
 }
 
 do-sync() {
-    emaint sync -A > /dev/null || return $?
-    eix-diff > "$tmpdir"/eix-diff.txt
+    emaint sync -A >/dev/null || return $?
+    eix-diff >"$tmpdir"/eix-diff.txt
 
     if [[ -s $tmpdir/eix-diff.txt ]]; then
         {
@@ -158,18 +160,18 @@ do-sync() {
 do-emerge() {
     local rmmod=()
 
-    if emerge -pvnuN --nodeps www-client/firefox mail-client/thunderbird \
-        | grep -Eo -- '-?pgo\b' \
-        | grep -Fxq pgo; then
+    if emerge -pvnuN --nodeps www-client/firefox mail-client/thunderbird |
+        grep -Eo -- '-?pgo\b' |
+        grep -Fxq pgo; then
 
         if [[ ! -d /sys/modules/nvidia ]]; then
-            modprobe nvidia \
-            && rmmod+=( nvidia_drm nvidia_uvm nvidia_modeset nvidia )
+            modprobe nvidia &&
+                rmmod+=(nvidia_drm nvidia_uvm nvidia_modeset nvidia)
         fi
     fi
 
     emerge --autounmask n --color n --keep-going -qvuDN --with-bdeps=y --accept-properties=-interactive --accept-restrict=-fetch @world \
-        > /dev/null || return $?
+        >/dev/null || return $?
 
     if [[ ${#rmmod[@]} -gt 0 ]]; then
         rmmod "${rmmod[@]}" || :
@@ -185,19 +187,19 @@ do-restart() {
 
 rebuild-old() {
     local -a atoms
-    local oldest="$(( $(date +%s) - 60*60*24*30*REBUILD_OLD_MONTHS ))"
-    local -x DATESORT='<date:DATESORT_DATE>\t<category>/<name>-<version>:<slot>\n'
+    local oldest="$(($(date +%s) - 60 * 60 * 24 * 30 * REBUILD_OLD_MONTHS))"
+    local -x DATESORT='<date:DATESORT_DATE>\t=<category>/<name>-<version>:<slot>\n'
 
     mapfile -t atoms < <(
-        eix '-I*' --format '<installedversions:DATESORT>' \
-        | awk -v OLDEST="$oldest" '$1<OLDEST { print $4 }' \
-        | grep -Fxv '' \
-        | grep -Ev '^acct-(group|user)/'
+        eix '-I*' --format '<installedversions:DATESORT>' |
+            awk -v OLDEST="$oldest" '$1<OLDEST { print $4 }' |
+            grep -Fxv '' |
+            grep -Ev '^acct-(group|user)/'
     )
 
     if [[ ${#atoms[@]} -gt 0 ]]; then
         echo "Rebuilding ${#atoms[@]} old $(plural package packages "${#atoms[@]}")."
-        emerge --color n --keep-going --oneshot -qv --accept-properties=-interactive --accept-restrict=-fetch "${atoms[@]}" >/dev/null
+        emerge --color n --keep-going --oneshot -qv --accept-properties=-interactive --accept-restrict=-fetch --with-bdeps=y "${atoms[@]}" >/dev/null
     else
         echo "No old packages found."
     fi
@@ -223,8 +225,8 @@ is-initrd-valid() {
     # Alternatively, we could loop through all initrds, but that's time consuming.
     local initramfs
     initramfs="$(
-        find /boot -maxdepth 1 -type f -name '*.img' -print0 \
-        | sort -zVr | head -zn1 | tr -d '\000'
+        find /boot -maxdepth 1 -type f -name '*.img' -print0 |
+            sort -zVr | head -zn1 | tr -d '\000'
     )" || return $?
 
     if ! [[ -f $initramfs ]]; then
@@ -232,9 +234,9 @@ is-initrd-valid() {
     fi
 
     mkdir "$tmpdir"/initrd && (
-        cd "$tmpdir"/initrd \
-        && lsinitrd --unpack "$initramfs" lib/modules/\*.ko \
-        || exit $?
+        cd "$tmpdir"/initrd &&
+            lsinitrd --unpack "$initramfs" lib/modules/\*.ko ||
+            exit $?
     ) || return $?
 
     while read -r f; do
@@ -251,13 +253,13 @@ eclean-distfiles() {
 }
 
 revdep-rebuild() {
-    command revdep-rebuild -- --keep-going -q > /dev/null
+    command revdep-rebuild -- --keep-going -q >/dev/null
 }
 
 is-network-up() {
-    networkctl list --no-legend \
-    | awk '{print $4}' \
-    | grep -qFx routable
+    networkctl list --no-legend |
+        awk '{print $4}' |
+        grep -qFx routable
 }
 
 wait-for-network() {
@@ -265,7 +267,7 @@ wait-for-network() {
     sleep 10
     until is-network-up; do
         sleep 10
-        if (( --retries == 0 )); then
+        if ((--retries == 0)); then
             echo "Network didn't come up in time!" >&2
             return 1
         fi
@@ -281,37 +283,37 @@ fix-repo-perms() {
         chowned=$(chown -cR "$owner" "$path" | wc -l)
         chmoded=$(chmod -cR g+rX "$path" | wc -l)
 
-        if (( UID == 0 )); then
-            gitsudo=( sudo -u "${owner%:*}" )
+        if ((UID == 0)); then
+            gitsudo=(sudo -u "${owner%:*}")
         fi
 
         if [[ -d "$path"/.git ]]; then
             "${gitsudo[@]}" git -C "$path" update-index -q --refresh
         fi
 
-        if (( chowned > 0 || chmoded > 0 )); then
+        if ((chowned > 0 || chmoded > 0)); then
             printf 'Files changed in repository "%s"!\n\n' "$repo"
-            if (( chowned > 0 )); then
+            if ((chowned > 0)); then
                 printf "${TAB}Owner changed to %s: %5d\n\n" "$owner" "$chowned"
             fi
-            if (( chmoded > 0 )); then
+            if ((chmoded > 0)); then
                 printf "${TAB}Mode changed:        %5d\n\n" "$chmoded"
             fi
         fi
-    done < <( portageq repos_config / | \
-        awk 'match($0,/^\[(.*)]/,a){repo=a[1]} $1=="sync-user"{print repo, " ", $3}' \
+    done < <(
+        portageq repos_config / |
+            awk 'match($0,/^\[(.*)]/,a){repo=a[1]} $1=="sync-user"{print repo, " ", $3}'
     )
 }
 
 main() {
-    if ! journalled --icon "$ICON_CLEAN" "Fix repository permissions" fix-repo-perms ; then
-       badnews="Couldn't fix the repository perms"
-       return 1
+    if ! journalled --icon "$ICON_CLEAN" "Fix repository permissions" fix-repo-perms; then
+        badnews="Couldn't fix the repository perms"
+        return 1
     fi
 
-    if ! is-network-up && \
-        ! journalled --icon "$ICON_WAIT" "Wait for the network to come up" wait-for-network
-    then
+    if ! is-network-up &&
+        ! journalled --icon "$ICON_WAIT" "Wait for the network to come up" wait-for-network; then
         badnews="The network didn't come up in time"
         return 1
     fi
@@ -333,15 +335,15 @@ main() {
         badnews="${badnews} Failed to ensure linking consistency!"
     fi
 
-    grep -F ') Merging (' "$tmpdir"/emerge.log | awk -v FS='[():]' '{print $5}' > "$tmpdir"/merged.txt
+    grep -F ') Merging (' "$tmpdir"/emerge.log | awk -v FS='[():]' '{print $5}' >"$tmpdir"/merged.txt
     declare -a merged
-    mapfile -t merged < "$tmpdir"/merged.txt
+    mapfile -t merged <"$tmpdir"/merged.txt
 
     if [[ ${#merged[@]} -gt 0 ]]; then
         {
             while read -r line; do
                 echo "${TAB}${BULLET} $(style "${DATUM}$line")"
-            done < "$tmpdir"/merged.txt
+            done <"$tmpdir"/merged.txt
         } | journal --icon "$ICON_INFO" "I merged these packages:"
     fi
 
@@ -371,15 +373,15 @@ main() {
 
     while read -r svc; do
         case "$svc" in
-        user@*|eebydeeby.*)
-            ;;
+        user@* | eebydeeby.*) ;;
         systemd-manager)
             local reexec_systemd=1
             needrestart=1
             ;;
         *.service)
-            torestart+=( "$svc" )
+            torestart+=("$svc")
             needrestart=1
+            ;;
         esac
     done < <(needrestart -b | awk '$1=="NEEDRESTART-SVC:"{print $2}')
 
@@ -394,23 +396,21 @@ main() {
             if [[ -v reexec_systemd ]]; then
                 echo $'\tSystemd itself'
             fi
-        } | journal  --icon "$ICON_WARN" "Need to restart these services:"
+        } | journal --icon "$ICON_WARN" "Need to restart these services:"
 
         if [[ -n $restart ]] && ! journalled --icon "$ICON_INFO" "Restarting services" do-restart; then
             badnews="${badnews} Failed to restart services."
         fi
     fi
 
-
     journalled --icon "$ICON_CLEAN" "Clean the distfiles" eclean-distfiles
 
-    echo "Goodbye!" \
-    | journal --icon "$ICON_INFO" "Install size: ${CSI}${FG}${YELLOW}m$(qsize -S)"
+    echo "Goodbye!" |
+        journal --icon "$ICON_INFO" "Install size: ${CSI}${FG}${YELLOW}m$(qsize -S)"
 }
 
-
 usage() {
-    cat<<EOF
+    cat <<EOF
 Usage: $0 [options...]
 
 Options:
@@ -447,16 +447,15 @@ fi
 eval set -- "$TEMP"
 unset TEMP
 
-
 while true; do
     opt="$1"
     shift
     case "$opt" in
-    -v|--verbose) verbose=1;;
-    -q|--quiet) verbose=;;
-    --no-sync) sync=;;
-    --no-restart) restart=;;
-    -h|--help)
+    -v | --verbose) verbose=1 ;;
+    -q | --quiet) verbose= ;;
+    --no-sync) sync= ;;
+    --no-restart) restart= ;;
+    -h | --help)
         usage
         exit
         ;;
@@ -508,7 +507,7 @@ else
     email() {
 
         local subject="$ICON_ROBOT $HOSTNAME: $1"
-        subject="=?utf-8?B?$(basenc --base64 -w0 <<< "$subject")?="
+        subject="=?utf-8?B?$(basenc --base64 -w0 <<<"$subject")?="
 
         {
             echo "From: $recipients"
@@ -531,10 +530,10 @@ main
 if [[ -z $verbose ]]; then
     if [[ -n $badnews ]]; then
         subj="$ICON_ERR ${badnews}"
-    elif (( errors == 0 )); then
+    elif ((errors == 0)); then
         subj="$ICON_OK Eebydeeby ran successfully"
     else
         subj="$ICON_WARN Eebydeeby ran with errors"
     fi
-    email "$subj" < "$tmpdir"/journal.txt
+    email "$subj" <"$tmpdir"/journal.txt
 fi
