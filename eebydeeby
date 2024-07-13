@@ -186,6 +186,7 @@ do-restart() {
 rebuild-old() {
     local -a atoms
     local oldest="$(( $(date +%s) - 60*60*24*30*REBUILD_OLD_MONTHS ))"
+    local -x DATESORT='<date:DATESORT_DATE>\t<category>/<name>-<version>:<slot>\n'
 
     mapfile -t atoms < <(
         eix '-I*' --format '<installedversions:DATESORT>' \
